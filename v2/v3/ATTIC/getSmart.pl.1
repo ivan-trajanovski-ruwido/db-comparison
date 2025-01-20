@@ -1,0 +1,124 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+use utf8;
+use CGI;
+use DBI;
+use Data::Dumper;
+
+use DataBase;
+use RuwidoSignalList;
+
+my $db = new DataBase();
+my $dbh = $db->connect();
+
+my $signalList = new RuwidoSignalList($db, $dbh);
+
+sub smart
+{
+	my ($q, $param) = @_;
+	my %descr = ();
+
+	foreach my $entry (keys $param) {
+		my $val = $param->{$entry};
+		next if ($entry !~ /^descr_/);
+		$entry =~ s/^descr_//;
+		$descr{$entry} = $val;
+	}
+
+	my $sql_fkt = "";
+	$sql_fkt .= sprintf("AND func_id IN (%s) ", $signalList->db_get_func($param)) if (defined $param->{fkt});
+
+	my $sql = "SELECT rc_oem_id, type_id FROM oem_to_signal o1 ";
+	my $sth;
+	my $i;
+
+	for ($i=2; $i<=keys %descr; $i++) {
+		$sql .= sprintf("JOIN oem_to_signal o%d USING (rc_oem_id, type_id, type_layer) ", $i);
+	}
+
+	$sql .= "WHERE 1=1 ";
+	$i = 1;
+	foreach my $entry (keys %descr) {
+#		$sql .= sprintf("AND o%d.func_id = %d AND o%d.descr = '%s' ", $i, $entry, $i, $descr{$entry});
+		$sql .= sprintf("AND o%d.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = '%s') AND o%d.descr = '%s' ", $i, $entry, $i, $descr{$entry});
+		$i++;
+	}
+
+
+	print "Content-type: text/plain; charset=utf-8\n\n";
+
+if (keys %descr) {
+########################################
+	print ("RC_OEM_IDS:\n");
+
+	$sth = $dbh->prepare("SELECT DISTINCT GROUP_CONCAT(rc_oem_id) AS rc_oem_id, 1 AS dummy FROM ($sql) t1 GROUP BY dummy");
+	$sth->execute();
+	while(my $row = $sth->fetchrow_hashref()) {
+		print $row->{rc_oem_id} . "\n";
+	}
+	$sth->finish();
+
+	printf "----------------------------------------\n";
+
+########################################
+	print ("MODELS:\n");
+
+	$sth = $dbh->prepare("SELECT DISTINCT brand.name AS brand, GROUP_CONCAT(name_display) AS name FROM mv_union JOIN brand ON (brand.id = brand_id) JOIN mv_union_to_oem ON (mv_union.id = mv_union_id) JOIN ($sql) t1 USING (rc_oem_id) GROUP BY brand");
+	$sth->execute();
+	while(my $row = $sth->fetchrow_hashref()) {
+		print $row->{brand} . ": " . $row->{name} . "\n";
+	}
+	$sth->finish();
+
+	printf "----------------------------------------\n";
+}
+########################################
+	print ("FUNCTIONS:\n");
+
+#SELECT rc_oem_id, func_id, descr from oem_to_signal JOIN (SELECT rc_oem_id, type_id FROM oem_to_signal o1 JOIN oem_to_signal o2 USING (rc_oem_id, type_id, type_layer) WHERE 1=1 AND o1.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'channel_up') AND o1.descr = '7 0 4 0 1' AND o2.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'power') AND o2.descr = '7 0 4 0 9') t1 USING (rc_oem_id, type_id) WHERE func_id IN (1,2,3,27,28,29,30,32);
+#SELECT func_id, GROUP_CONCAT(DISTINCT descr), GROUP_CONCAT(DISTINCT rc_oem_id) from oem_to_signal JOIN (SELECT rc_oem_id, type_id FROM oem_to_signal o1 JOIN oem_to_signal o2 USING (rc_oem_id, type_id, type_layer) WHERE 1=1 AND o1.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'channel_up') AND o1.descr = '7 0 4 0 1' AND o2.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'power') AND o2.descr = '7 0 4 0 9') t1 USING (rc_oem_id, type_id) WHERE func_id IN (1,2,3,27,28,29,30,32) GROUP BY func_id;
+#SELECT func_id, COUNT(DISTINCT descr) AS num_descr, COUNT(DISTINCT descr)/COUNT(DISTINCT rc_oem_id) AS ratio from oem_to_signal JOIN (SELECT rc_oem_id, type_id FROM oem_to_signal o1 JOIN oem_to_signal o2 USING (rc_oem_id, type_id, type_layer) WHERE 1=1 AND o1.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'channel_up') AND o1.descr = '7 0 4 0 1' AND o2.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'power') AND o2.descr = '7 0 4 0 9') t1 USING (rc_oem_id, type_id) WHERE func_id IN (1,2,3,27,28,29,30,32) GROUP BY func_id ORDER BY num_descr DESC, ratio DESC;
+#SELECT func_to_name.name AS func_name, COUNT(DISTINCT descr) AS num_descr, COUNT(DISTINCT descr)/COUNT(DISTINCT rc_oem_id) AS ratio from oem_to_signal JOIN (SELECT rc_oem_id, type_id FROM oem_to_signal o1 JOIN oem_to_signal o2 USING (rc_oem_id, type_id, type_layer) WHERE 1=1 AND o1.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'channel_up') AND o1.descr = '7 0 4 0 1' AND o2.func_id IN (SELECT func_to_name.id FROM func_to_name WHERE name = 'power') AND o2.descr = '7 0 4 0 9') t1 USING (rc_oem_id, type_id) JOIN func_to_name ON (func_id = func_to_name.id) WHERE func_id IN (1,2,3,27,28,29,30,32) GROUP BY func_id ORDER BY num_descr DESC, ratio DESC, func_id ASC;
+#	my $sql1 = "SELECT func_name, func_id, func_num/oem_num AS ratio, func_num, oem_num, d FROM (SELECT func_to_name.name AS func_name,func_id,GROUP_CONCAT(DISTINCT descr) AS d,COUNT(DISTINCT descr) AS func_num,COUNT(DISTINCT rc_oem_id) AS oem_num FROM (SELECT DISTINCT rc_oem_id, func_id, oem_to_signal.descr AS descr FROM oem_to_signal JOIN ($sql) s1 USING (rc_oem_id)) t1 JOIN func_to_name ON (func_to_name.id = func_id) GROUP BY func_id) t2 ";
+
+	my $sql1 = "SELECT func_to_name.name AS func_name, COUNT(DISTINCT descr) AS num_descr, COUNT(DISTINCT descr)/COUNT(DISTINCT rc_oem_id) AS ratio from oem_to_signal JOIN ($sql) t1 USING (rc_oem_id, type_id) JOIN func_to_name ON (func_id = func_to_name.id)";
+	if (defined $param->{fkt}) {
+		$sql1 .= sprintf("WHERE func_id IN (%s) ", $signalList->db_get_func($param));
+	}
+	$sql1 .= "GROUP BY func_id ORDER BY num_descr DESC, ratio DESC, func_id ASC";
+
+print $sql1;
+	$sth = $dbh->prepare($sql1);
+
+	$sth->execute();
+	while(my $row = $sth->fetchrow_hashref()) {
+		printf ("%-20s: %d %f\n", $row->{func_name}, $row->{num_descr}, $row->{ratio});
+#		printf ("%3d %-20s: %f\n", $row->{func_id}, $row->{func_name}, $row->{ratio});
+	}
+	$sth->finish();
+
+	printf "----------------------------------------\n";
+}
+
+########################################
+
+my $q = CGI->new;
+my %param = $q->Vars;
+
+$param{model_id} = '' if (defined $param{model_id} && $param{model_id} eq "true");		# HACK for jquery
+$param{model_name} = '' if (defined $param{model_name} && $param{model_name} eq "true");	# HACK for jquery
+$param{debug} = 0 if (!$db->checkAccessDebug(\%param));
+
+#$db->print_error($q, 401, "Unauthorized") if (exists $param->{"cycle_"});
+
+	smart($q, \%param);
+#if ($db->checkAccess(\%param)) {
+	#smart($q, \%param);
+#} else {
+	#$db->print_error($q, 401, "Unauthorized");
+#}
+
+$db->disconnect();
+exit 0;
