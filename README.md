@@ -6,7 +6,7 @@ A simple tool to compare two Ruwido databases and check for differences in their
 
 1. Activate the virtual environment:
 ```bash
-source ruwido-db-env/bin/activate  
+source ruwido-db-env/bin/activate  # On macOS/Linux
 ```
 
 2. Verify you're in the virtual environment:
@@ -30,8 +30,34 @@ python3 test_database.py
 
 ## Endpoints Tested
 
-1. `list/tv/` - Compares the number of brands between databases
-2. `empty/signal` - Verifies that signal orders match between databases
+The tool uses an endpoint configuration system that makes it easy to add new endpoints. Currently configured endpoints:
+
+1. `list/tv/` - Compares the number of TV brands
+2. `list/stb/` - Compares the number of Set-top box brands
+3. `empty/signal` - Verifies that signal orders match
+
+## Adding a New Endpoint
+
+To add a new endpoint for testing:
+
+1. Open `test_database.py`
+2. Locate the `ENDPOINT_CONFIG` dictionary at the top of the file
+3. Add your new endpoint using the format:
+```python
+'endpoint/path': ('Description', 'test_function')
+```
+
+Available test functions:
+- `compare_brands` - For comparing number of brands
+- `compare_signal_order` - For comparing signal order in XML responses
+
+Example:
+```python
+ENDPOINT_CONFIG = {
+    'list/tv/': ('TV brands comparison', 'compare_brands'),
+    'your/new/endpoint': ('Your description', 'compare_brands')
+}
+```
 
 ## Output
 

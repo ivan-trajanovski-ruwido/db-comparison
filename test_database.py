@@ -15,8 +15,15 @@ YELLOW = '\033[93m'
 BOLD = '\033[1m'
 RESET = '\033[0m'
 
-# Test endpoints
-TEST_URLS = ["list/tv/", "empty/signal"]
+# Endpoint Configuration
+# Format: 'endpoint': ('description', test_function)
+ENDPOINT_CONFIG = {
+    'list/tv/': ('TV brands comparison', 'compare_brands'),
+    'list/stb/': ('Set-top box brands comparison', 'compare_brands'),
+    'empty/signal': ('Signal order verification', 'compare_signal_order')
+}
+
+TEST_ENDPOINTS = list(ENDPOINT_CONFIG.keys())
 differences_summary = []
 
 def fetch_response(url):
@@ -69,7 +76,7 @@ def compare_brands(current_data, new_data, url_part):
         print(f"  {GREEN}→ Brand counts match{RESET}")
         differences_summary.append((url_part, True, "Brand counts match"))
 
-def compare_signal_order(current_data, new_data):
+def compare_signal_order(current_data, new_data, url_part):
     """Compare the order of signals."""
     current_signals = [signal.get('name') for signal in current_data.findall('.//signal')]
     new_signals = [signal.get('name') for signal in new_data.findall('.//signal')]
@@ -87,15 +94,19 @@ def compare_signal_order(current_data, new_data):
             if curr != new and i < 3:
                 print(f"    Example: Position {i}: {YELLOW}{curr}{RESET} → {BLUE}{new}{RESET}")
         
-        differences_summary.append(("empty/signal", False, msg))
+        differences_summary.append((url_part, False, msg))
     else:
         print(f"  {GREEN}→ Signal order matches{RESET}")
-        differences_summary.append(("empty/signal", True, "Signal order matches"))
+        differences_summary.append((url_part, True, "Signal order matches"))
 
 def compare_responses(current_url, new_url):
     """Compare the responses from the current and new DB."""
     endpoint = current_url.split("v2/")[-1]
+    description = ENDPOINT_CONFIG[endpoint][0]
+    test_function = globals()[ENDPOINT_CONFIG[endpoint][1]]
+    
     print(f"\n{BOLD}Testing endpoint:{RESET} {YELLOW}{endpoint}{RESET}")
+    print(f"{BOLD}Test type:{RESET} {description}")
     print(f"{'─' * 50}")
     
     try:
@@ -115,17 +126,14 @@ def compare_responses(current_url, new_url):
         differences_summary.append((endpoint, False, msg))
         return
 
-    if endpoint == "list/tv/":
-        print(f"  {BLUE}Testing brand counts...{RESET}")
-        compare_brands(current_data, new_data, endpoint)
-    elif endpoint == "empty/signal":
-        print(f"  {BLUE}Testing signal order...{RESET}")
-        if current_type == 'xml':
-            compare_signal_order(current_data, new_data)
-        else:
+    if endpoint.endswith('signal'):
+        if current_type != 'xml':
             msg = "Non-XML response for signal comparison"
             print(f"  {RED}→ {msg}{RESET}")
             differences_summary.append((endpoint, False, msg))
+            return
+
+    test_function(current_data, new_data, endpoint)
 
 def print_summary(total_time):
     """Print a summary of all comparisons."""
@@ -135,7 +143,8 @@ def print_summary(total_time):
     
     for url_part, passed, details in differences_summary:
         status = f"{GREEN}✓ PASS{RESET}" if passed else f"{RED}✗ FAIL{RESET}"
-        print(f"{status} | {url_part:<15} | {details}")
+        description = ENDPOINT_CONFIG[url_part][0]
+        print(f"{status} | {url_part:<15} | {description:<25} | {details}")
     
     all_passed = all(result[1] for result in differences_summary)
     print(f"\n{BOLD}Time:{RESET} {total_time:.2f}s")
@@ -150,7 +159,7 @@ if __name__ == "__main__":
     
     start_time = time.time()
     
-    for test_url in TEST_URLS:
+    for test_url in TEST_ENDPOINTS:
         current_url = CURRENT_DB_URL + test_url
         new_url = NEW_DB_URL + test_url
         compare_responses(current_url, new_url)

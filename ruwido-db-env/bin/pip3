@@ -1,5 +1,5 @@
 #!/bin/sh
-'''exec' "/Users/ivan/Developer/ruwido projects/OnlineDB/myenv/bin/python3.11" "$0" "$@"
+'''exec' "/Users/ivan/Developer/ruwido projects/OnlineDB/ruwido-db-env/bin/python3.12" "$0" "$@"
 ' '''
 # -*- coding: utf-8 -*-
 import re
