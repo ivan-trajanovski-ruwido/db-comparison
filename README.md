@@ -2,6 +2,18 @@
 
 A simple tool to compare two Ruwido databases and check for differences in their responses.
 
+## Setup
+
+1. Activate the virtual environment:
+```bash
+source ruwido-db-env/bin/activate  
+```
+
+2. Verify you're in the virtual environment:
+```bash
+which python  # Should show path ending in ruwido-db-env/bin/python
+```
+
 ## Features
 
 - Compares brand counts between databases
@@ -11,7 +23,7 @@ A simple tool to compare two Ruwido databases and check for differences in their
 
 ## Usage
 
-Simply run:
+With the virtual environment activated, run:
 ```bash
 python3 test_database.py
 ```
@@ -32,4 +44,14 @@ The tool provides:
 ## Requirements
 
 - Python 3
+- Virtual environment: `ruwido-db-env`
 - Required packages: requests, lxml
+
+## Development
+
+To create a new virtual environment (if needed):
+```bash
+python3 -m venv ruwido-db-env
+source ruwido-db-env/bin/activate
+pip install requests lxml
+```
