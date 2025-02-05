@@ -29,7 +29,8 @@ differences_summary = []
 def fetch_response(url):
     """Send a GET request and return the response content."""
     try:
-        response = requests.get(url)
+        headers = {'Accept': 'application/xml'}
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
         if len(response.content) == 0:
             raise RuntimeError(f"Empty response received from {url}")
