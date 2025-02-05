@@ -29,7 +29,12 @@ differences_summary = []
 def fetch_response(url):
     """Send a GET request and return the response content."""
     try:
-        headers = {'Accept': 'application/xml'}
+        # Use XML for signal endpoints, JSON for everything else
+        if 'signal' in url:
+            headers = {'Accept': 'application/xml'}
+        else:
+            headers = {'Accept': 'application/json'}
+        
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         if len(response.content) == 0:
@@ -53,15 +58,24 @@ def parse_response(content):
 
 def count_brands(data):
     """Count the number of brands."""
+    # For JSON response (list/tv endpoint)
     if isinstance(data, list):
-        return sum(count_brands(item) for item in data)
-    elif isinstance(data, dict):
-        return sum(count_brands(value) for value in data.values())
-    else:
-        return 1
+        return len(data)
+    # For XML response
+    elif isinstance(data, etree._Element):
+        remotes = data.find('remotes')
+        if remotes is not None:
+            return int(remotes.get('total', 0))
+        return 0
+    # For other cases
+    return 0
 
 def compare_brands(current_data, new_data, url_part):
     """Compare brands in the responses."""
+    # print(f"DEBUG: Data type current_data: {type(current_data)}")
+    # print(f"DEBUG: Data type new_data: {type(new_data)}")
+    # print(f"DEBUG: First item of new_data: {new_data[0] if isinstance(new_data, list) else 'not a list'}")
+    
     current_total = count_brands(current_data)
     new_total = count_brands(new_data)
     total_diff = new_total - current_total
