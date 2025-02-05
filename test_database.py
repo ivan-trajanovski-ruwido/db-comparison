@@ -70,18 +70,31 @@ def count_brands(data):
     # For other cases
     return 0
 
+# Global variable to store detailed differences
+detailed_differences = {}
+
 def compare_brands(current_data, new_data, url_part):
     """Compare brands in the responses."""
-    # print(f"DEBUG: Data type current_data: {type(current_data)}")
-    # print(f"DEBUG: Data type new_data: {type(new_data)}")
-    # print(f"DEBUG: First item of new_data: {new_data[0] if isinstance(new_data, list) else 'not a list'}")
-    
     current_total = count_brands(current_data)
     new_total = count_brands(new_data)
     total_diff = new_total - current_total
 
     print(f"  {YELLOW}Production DB:{RESET} {current_total} brands")
     print(f"  {YELLOW}New DB:{RESET} {new_total} brands")
+    
+    # If detailed diff is requested, collect the differences
+    if args.detailed_diff:
+        current_brands = {b['id']: b for b in current_data} if isinstance(current_data, list) else {}
+        new_brands = {b['id']: b for b in new_data} if isinstance(new_data, list) else {}
+        
+        new_only = [b for b in new_brands.values() if b['id'] not in current_brands]
+        prod_only = [b for b in current_brands.values() if b['id'] not in new_brands]
+        
+        detailed_differences[url_part] = {
+            'differences': bool(new_only or prod_only),
+            'new_only': new_only,
+            'prod_only': prod_only
+        }
     
     if total_diff != 0:
         msg = f"Brand count difference: {abs(total_diff)} {'more' if total_diff > 0 else 'less'} in New DB"
@@ -153,20 +166,108 @@ def compare_responses(current_url, new_url):
 def print_summary(total_time):
     """Print a summary of all comparisons."""
     print(f"\n{BOLD}{'='*50}{RESET}")
-    print(f"{BOLD}DATABASE COMPARISON SUMMARY{RESET}")
+    print(f"{BOLD}DATABASE COMPARISON SUMMARY / DATENBANKVERGLEICH ZUSAMMENFASSUNG{RESET}")
     print(f"{BOLD}{'='*50}{RESET}")
     
     for url_part, passed, details in differences_summary:
-        status = f"{GREEN}✓ PASS{RESET}" if passed else f"{RED}✗ FAIL{RESET}"
+        status = f"{GREEN}✓ BESTANDEN{RESET}" if passed else f"{RED}✗ FEHLGESCHLAGEN{RESET}"
         description = ENDPOINT_CONFIG[url_part][0]
-        print(f"{status} | {url_part:<15} | {description:<25} | {details}")
+        
+        # Translate the details message
+        de_details = details
+        if "Brand counts match" in details:
+            de_details = "Markenanzahl stimmt überein"
+        elif "Brand count difference:" in details:
+            count = details.split(': ')[1].split(' ')[0]
+            more_less = "mehr" if "more" in details else "weniger"
+            de_details = f"Unterschied in der Markenanzahl: {count} {more_less} in der neuen DB"
+        elif "Signal order matches" in details:
+            de_details = "Signalreihenfolge stimmt überein"
+        elif "Empty response received" in details:
+            de_details = "Leere Antwort erhalten"
+        elif "Invalid or mismatched response formats" in details:
+            de_details = "Ungültige oder nicht übereinstimmende Antwortformate"
+        
+        print(f"{status} | {url_part:<15} | {description:<25} | {details} / {de_details}")
     
     all_passed = all(result[1] for result in differences_summary)
-    print(f"\n{BOLD}Time:{RESET} {total_time:.2f}s")
-    print(f"{BOLD}Status:{RESET} {GREEN}PASSED{RESET}" if all_passed else f"{RED}FAILED{RESET}")
+    print(f"\n{BOLD}Time / Zeit:{RESET} {total_time:.2f}s")
+    status_text = f"{GREEN}PASSED / BESTANDEN{RESET}" if all_passed else f"{RED}FAILED / FEHLGESCHLAGEN{RESET}"
+    print(f"{BOLD}Status:{RESET} {status_text}")
     print(f"{BOLD}{'='*50}{RESET}")
 
+def generate_detailed_report(differences):
+    """Generate a detailed markdown report of the differences."""
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    filename = f"db_comparison_report_{timestamp}.md"
+    
+    with open(filename, 'w') as f:
+        # Title and header
+        f.write("# Database Comparison Report / Datenbankvergleichsbericht\n\n")
+        f.write(f"Generated / Erstellt am: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write("## Database Information / Datenbankinformationen\n\n")
+        f.write(f"Production Database / Produktionsdatenbank:\n`{CURRENT_DB_URL}`\n\n")
+        f.write(f"New Database / Neue Datenbank:\n`{NEW_DB_URL}`\n\n")
+        f.write("---\n\n")
+        
+        # Summary section
+        f.write("## Summary / Zusammenfassung\n\n")
+        total_new = sum(len(d['new_only']) for d in differences.values())
+        total_missing = sum(len(d['prod_only']) for d in differences.values())
+        
+        if total_new == 0 and total_missing == 0:
+            f.write("🟢 **No differences found** / **Keine Unterschiede gefunden**\n\n")
+        else:
+            f.write(f"### Overall Changes / Gesamtänderungen:\n")
+            if total_new > 0:
+                f.write(f"- 🆕 **{total_new}** new brands in the new database / neue Marken in der neuen Datenbank\n")
+            if total_missing > 0:
+                f.write(f"- ❌ **{total_missing}** brands missing from new database / Marken fehlen in der neuen Datenbank\n")
+            f.write("\n")
+        
+        f.write("---\n\n")
+        
+        # Detailed differences by endpoint
+        f.write("## Detailed Analysis / Detaillierte Analyse\n\n")
+        for endpoint, diff_data in differences.items():
+            f.write(f"### {endpoint}\n\n")
+            
+            if not diff_data['differences']:
+                f.write("✅ **No differences found in this endpoint** / **Keine Unterschiede in diesem Endpunkt gefunden**\n\n")
+                continue
+            
+            # New brands section
+            new_count = len(diff_data['new_only'])
+            if new_count > 0:
+                f.write(f"#### 🆕 New Brands / Neue Marken ({new_count})\n")
+                f.write("*These brands are present in the new database but not in the production database* /\n")
+                f.write("*Diese Marken sind in der neuen Datenbank vorhanden, aber nicht in der Produktionsdatenbank*\n\n")
+                for brand in sorted(diff_data['new_only'], key=lambda x: x['label'].lower()):
+                    f.write(f"- **{brand['label']}** (ID: `{brand['id']}`)\n")
+                f.write("\n")
+            
+            # Missing brands section
+            missing_count = len(diff_data['prod_only'])
+            if missing_count > 0:
+                f.write(f"#### ❌ Missing Brands / Fehlende Marken ({missing_count})\n")
+                f.write("*These brands are present in the production database but missing from the new database* /\n")
+                f.write("*Diese Marken sind in der Produktionsdatenbank vorhanden, fehlen aber in der neuen Datenbank*\n\n")
+                for brand in sorted(diff_data['prod_only'], key=lambda x: x['label'].lower()):
+                    f.write(f"- **{brand['label']}** (ID: `{brand['id']}`)\n")
+                f.write("\n")
+            
+            f.write("---\n\n")
+    
+    print(f"\n📄 Detailed report generated / Detaillierter Bericht erstellt: {filename}")
+
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Compare two database instances')
+    parser.add_argument('--detailed-diff', action='store_true',
+                      help='Generate a detailed report of differences')
+    args = parser.parse_args()
+    
     print(f"\n{BOLD}DATABASE COMPARISON TEST{RESET}")
     print(f"{BOLD}{'='*50}{RESET}")
     print(f"{BLUE}Production DB:{RESET} {CURRENT_DB_URL}")
@@ -180,3 +281,7 @@ if __name__ == "__main__":
         compare_responses(current_url, new_url)
     
     print_summary(time.time() - start_time)
+    
+    # Generate detailed report if requested
+    if args.detailed_diff:
+        generate_detailed_report(detailed_differences)

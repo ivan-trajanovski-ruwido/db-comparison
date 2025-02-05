@@ -19,14 +19,30 @@ which python  # Should show path ending in ruwido-db-env/bin/python
 - Compares brand counts between databases
 - Verifies signal order consistency
 - Provides clear, colored output with detailed differences
-- Shows summary of all comparisons
+- Shows bilingual summary (English/German) of all comparisons
+- Generates detailed markdown reports of differences
 
 ## Usage
 
-With the virtual environment activated, run:
+With the virtual environment activated, you have two options:
+
+1. Basic comparison:
 ```bash
 python3 test_database.py
 ```
+
+2. Detailed comparison report:
+```bash
+python3 test_database.py --detailed-diff
+```
+
+The `--detailed-diff` option generates a detailed markdown report (`db_comparison_report_YYYYMMDD_HHMMSS.md`) that includes:
+- Complete list of brands present in the new DB but not in production
+- Complete list of brands present in production but missing from the new DB
+- Bilingual descriptions (English/German) for better accessibility
+- Summary of total changes across all endpoints
+
+The report is formatted in markdown.
 
 ## Endpoints Tested
 
